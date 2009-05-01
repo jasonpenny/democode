@@ -1,0 +1,14 @@
+*.bpl
+*.dcp
+*.dcu
+*.identcache
+*.local
+*.exe
+*.map
+*.jdbg
+# Resource files. I tend to compile from RC files, can force add project RES files.
+*.res
+# Resource String file, always re-generated if compiler setting is set (-GD)
+*.drc
+# leave out Delphi 2009 project files, because they cause errors when trying to open in Delphi 2007
+*.dproj

@@ -11,7 +11,9 @@ uses
 
 begin
   Application.Initialize;
+{$IF CompilerVersion > 18}
   Application.MainFormOnTaskbar := True;
+{$IFEND}
   Application.CreateForm(TfrmdGinaTest, frmdGinaTest);
   Application.Run;
 end.

@@ -139,10 +139,10 @@ procedure TResModule.SaveToStream(stream: TStream);
 var
   res : TResourceDetails;
   dataSize, headerSize, totalSize : Integer;
-  header : array [0..1023] of char;
+  header : array [0..1023] of Byte;
   i : Integer;
 
-  function GetResHeader (header : PChar) : DWORD;
+  function GetResHeader (header : PByte) : DWORD;
   var
     pos : DWORD;
     len, dw : DWORD;
@@ -224,7 +224,7 @@ begin
       dataSize := res.Data.Size;
 
       stream.WriteBuffer (dataSize, sizeof (dataSize));
-      headerSize := GetResHeader (header);
+      headerSize := GetResHeader (@header);
 
       totalSize := headerSize + 2 * sizeof (DWORD);
 
@@ -243,7 +243,7 @@ begin
       dataSize := res.Data.Size;
 
       stream.WriteBuffer (dataSize, sizeof (dataSize));
-      headerSize := GetResHeader (header);
+      headerSize := GetResHeader (@header);
 
       totalSize := headerSize + 2 * sizeof (DWORD);
 

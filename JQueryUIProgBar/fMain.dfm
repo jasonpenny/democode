@@ -56,6 +56,7 @@ object frmMain: TfrmMain
     Top = 66
     Width = 105
     Height = 25
+    Anchors = [akTop, akRight]
     Caption = 'Set Prog Value'
     TabOrder = 3
     OnClick = btnSetProgValueClick
@@ -65,6 +66,7 @@ object frmMain: TfrmMain
     Top = 106
     Width = 105
     Height = 25
+    Anchors = [akTop, akRight]
     Caption = 'Inc Prog Value'
     TabOrder = 4
     OnClick = btnIncProgValueClick

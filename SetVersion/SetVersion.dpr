@@ -21,13 +21,39 @@ type
     function  AsULargeInteger: TULargeInteger;
   end;
 
-function GetResFile(const s: String): String;
+  TResourceType = (rtRES, rtEXE);
+
+  TResourceFile = record
+    ResourceType: TResourceType;
+    FileName:     String;
+  end;
+
+function GetResourceFile(const s: String): TResourceFile;
 begin
-   Result := s;
-   if not SameText(ExtractFileExt(Result), '.RES') then
-      Result := ChangeFileExt(Result, '.res');
-   if not FileExists(Result) then
-      raise Exception.Create('Could not find the RES file.');
+   Result.FileName := s;
+
+   if SameText(ExtractFileExt(s), '.EXE') and FileExists(s) then
+      Result.ResourceType := rtEXE
+
+   else if SameText(ExtractFileExt(s), '.RES') and FileExists(s) then
+      Result.ResourceType := rtRES
+
+   else
+   begin
+      Result.FileName := ChangeFileExt(Result.FileName, '.res');
+      if FileExists(Result.FileName) then
+         Result.ResourceType := rtRES
+
+      else
+      begin
+         Result.FileName := ChangeFileExt(Result.FileName, '.exe');
+         if FileExists(Result.FileName) then
+            Result.ResourceType := rtRes
+
+         else
+            raise Exception.CreateFmt('Could not find an EXE or RES file matching that name "%s".', [s]);
+      end;
+   end;
 end;
 
 { VersionNumber }
@@ -46,7 +72,7 @@ begin
    Build   := aULargeInteger.LowPart  and ((1 shl 16) - 1);
 end;
 
-function GetVersionInfoResourceDetails(aResModule: TResModule): TVersionInfoResourceDetails;
+function GetVersionInfoResourceDetails(aResModule: TResourceModule): TVersionInfoResourceDetails;
 var
    i: Integer;
 begin
@@ -88,13 +114,86 @@ begin
    end;
 end;
 
+procedure HandleVersionNumber(const aResourceModule: TResourceModule; 
+  const aFileName: String; aVersion: String; const aIncrement, aPrintVersion, aSaveFile: Boolean);
 var
-  i: Integer;
-  version, filename: String;
-  increment, print_version, save_file: Boolean;
-  ResModule: TResModule;
   VersionInfoResourceDetails: TVersionInfoResourceDetails;
   VersionNumber: TVersionNumber;
+begin
+   aResourceModule.LoadFromFile(aFileName);
+  
+   VersionInfoResourceDetails := GetVersionInfoResourceDetails(aResourceModule);
+  
+   if not Assigned(VersionInfoResourceDetails) then
+      raise Exception.CreateFmt('No VersionInfo found in %s', [aFileName])
+   else
+   begin
+     VersionNumber.FromULargeInteger(VersionInfoResourceDetails.FileVersion);
+  
+     if aPrintVersion and aIncrement and (not aSaveFile) and (aVersion = '') then
+       Writeln('Warning: Increment was chosen, but Save was not; file will not be updated.');
+
+     if aVersion <> '' then
+     begin
+       SetVersionFromString(aVersion, VersionNumber.Major);
+       SetVersionFromString(aVersion, VersionNumber.Minor);
+       SetVersionFromString(aVersion, VersionNumber.Release);
+       SetVersionFromString(aVersion, VersionNumber.Build);
+     end;
+    
+     if aIncrement then
+       Inc(VersionNumber.Build);
+    
+     if aPrintVersion then
+     begin
+       Writeln(
+         Format(
+            '%s: %d.%d.%d.%d',
+            [aFileName, VersionNumber.Major, VersionNumber.Minor, VersionNumber.Release, VersionNumber.Build]
+         )
+       );
+     end;
+
+     VersionInfoResourceDetails.FileVersion := VersionNumber.AsULargeInteger;
+    
+     if aSaveFile then
+     begin
+       // commenting this out will copy existing RES files to [resfile].~res backup files
+       DeleteFile(PChar(aFileName));
+       aResourceModule.SaveToFile(aFileName);
+     end;
+   end;
+end;
+
+procedure HandleResFile(const aFileName, aVersion: String; const aIncrement, aPrintVersion, aSaveFile: Boolean);
+var
+  ResModule: TResModule;
+begin
+  ResModule := TResModule.Create;
+  try
+    HandleVersionNumber(ResModule, aFileName, aVersion, aIncrement, aPrintVersion, aSaveFile);
+  finally
+    ResModule.Free;
+  end;
+end;
+
+procedure HandleExeFile(const aFileName, aVersion: String; const aIncrement, aPrintVersion, aSaveFile: Boolean);
+var
+  PEResourceModule: TPEResourceModule;
+begin
+  PEResourceModule := TPEResourceModule.Create;
+  try
+    HandleVersionNumber(PEResourceModule, aFileName, aVersion, aIncrement, aPrintVersion, aSaveFile);
+  finally
+    PEResourceModule.Free;
+  end;
+end;
+
+var
+  i: Integer;
+  version: String;
+  increment, print_version, save_file: Boolean;
+  ResourceFile: TResourceFile;
 begin
   try
     if ParamCount < 1 then
@@ -105,7 +204,7 @@ begin
       Writeln(' -vX.X.X.X will set the version to X.X.X.X');
       Writeln(' -i will increment the build number');
       Writeln(' -p will print the (new) build number');
-      Writeln(' -s will save the changes to the RES file.');
+      Writeln(' -s will save the changes to the EXE/RES file.');
       Writeln('');
       Exit;
     end;
@@ -113,8 +212,6 @@ begin
     increment     := false;
     print_version := false;
     save_file     := false;
-    version  := '';
-    filename := '';
 
     for i := 1 to ParamCount do
     begin
@@ -127,57 +224,15 @@ begin
       else if Copy(ParamStr(i), 1, 2) = '-s' then
         save_file := true
       else
-        filename := GetResFile(ParamStr(i));
+        ResourceFile := GetResourceFile(ParamStr(i));
     end;
 
-    ResModule := TResModule.Create;
-    try
-      ResModule.LoadFromFile(filename);
-
-      VersionInfoResourceDetails := GetVersionInfoResourceDetails(ResModule);
-
-      if not Assigned(VersionInfoResourceDetails) then
-         raise Exception.CreateFmt('No VersionInfo found in %s', [filename])
-      else
-      begin
-        VersionNumber.FromULargeInteger(VersionInfoResourceDetails.FileVersion);
-
-        if version <> '' then
-        begin
-          SetVersionFromString(version, VersionNumber.Major);
-          SetVersionFromString(version, VersionNumber.Minor);
-          SetVersionFromString(version, VersionNumber.Release);
-          SetVersionFromString(version, VersionNumber.Build);
-        end;
-
-        if increment then
-          Inc(VersionNumber.Build);
-
-        if print_version then
-        begin
-          Writeln(
-            Format(
-               '%s: %d.%d.%d.%d',
-               [filename, VersionNumber.Major, VersionNumber.Minor, VersionNumber.Release, VersionNumber.Build]
-            )
-          );
-        end;
-
-        VersionInfoResourceDetails.FileVersion := VersionNumber.AsULargeInteger;
-
-        if save_file then
-        begin
-          // commenting this out will copy existing RES files to [resfile].~res backup files
-          DeleteFile(PChar(filename));
-          ResModule.SaveToFile(filename);
-        end;
-      end;
-    finally
-      ResModule.Free;
+    case ResourceFile.ResourceType of
+      rtRES: HandleResFile(ResourceFile.FileName, version, increment, print_version, save_file);
+      rtEXE: HandleExeFile(ResourceFile.FileName, version, increment, print_version, save_file);
     end;
 
-    version  := '';
-    filename := '';
+    ResourceFile.FileName := '';
   except
     on E:Exception do
       Writeln(E.Classname, ': ', E.Message);
